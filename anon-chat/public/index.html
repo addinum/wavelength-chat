@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wavelength — Anonymous Chat</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== LANDING SCREEN ===== -->
+<section id="landing" class="screen">
+  <div class="dial-visual" aria-hidden="true">
+    <div class="ring ring--outer"></div>
+    <div class="ring ring--mid"></div>
+    <div class="ring ring--inner"></div>
+    <div class="dial-needle"></div>
+    <div class="dial-center">
+      <span class="dial-freq" id="dialFreq">88.0</span>
+      <span class="dial-unit">FM</span>
+    </div>
+  </div>
+
+  <div class="landing-copy">
+    <p class="eyebrow">no account · no login · fully anonymous</p>
+    <h1>Wavelength</h1>
+    <p class="subhead">Tune in to a stranger. Talk for a minute or an hour. Switch frequency whenever you like.</p>
+
+    <label class="name-field">
+      <span>What should we call you?</span>
+      <input type="text" id="nameInput" placeholder="Leave blank to stay Stranger" maxlength="24" autocomplete="off">
+    </label>
+
+    <button id="startBtn" class="btn-primary">Find a stranger</button>
+    <p class="fine-print">By continuing you agree not to share personal contact details. Be kind — someone real is on the other end.</p>
+  </div>
+</section>
+
+<!-- ===== SEARCHING SCREEN ===== -->
+<section id="searching" class="screen hidden">
+  <div class="scan-visual" aria-hidden="true">
+    <div class="scan-bar">
+      <div class="scan-sweep"></div>
+    </div>
+  </div>
+  <p class="scan-label">Scanning frequencies<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+  <p class="scan-sub">Looking for someone else tuned in right now</p>
+  <button id="cancelSearchBtn" class="btn-ghost">Cancel</button>
+</section>
+
+<!-- ===== CHAT SCREEN ===== -->
+<section id="chat" class="screen hidden">
+  <header class="chat-header">
+    <div class="chat-header__status">
+      <span class="signal-dot" id="signalDot"></span>
+      <span id="chatWithLabel">Connected to Stranger</span>
+    </div>
+    <div class="chat-header__actions">
+      <button id="skipBtn" class="btn-chip">Next stranger →</button>
+      <button id="leaveBtn" class="btn-chip btn-chip--muted">Leave</button>
+    </div>
+  </header>
+
+  <div class="chat-log" id="chatLog"></div>
+
+  <div class="typing-indicator hidden" id="typingIndicator">stranger is typing…</div>
+
+  <form id="chatForm" class="chat-input-bar">
+    <input type="text" id="chatInput" placeholder="Say something…" maxlength="2000" autocomplete="off">
+    <button type="submit" class="btn-send" aria-label="Send">Send</button>
+  </form>
+</section>
+
+<!-- ===== STRANGER LEFT TOAST ===== -->
+<div id="leftToast" class="toast hidden">
+  <span>The stranger disconnected.</span>
+  <button id="toastFindBtn" class="btn-chip">Find another</button>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
