@@ -40,6 +40,9 @@
   let remoteTypingTimeout = null;
   let currentStrangerName = 'Stranger';
   let pendingConnectByCode = false;
+  let chatHistoryPushed = false;
+  let reconnectAttempts = 0;
+  let userInitiatedClose = false;
 
   // ---------- Contacts (stored only in this browser's localStorage) ----------
   const CONTACTS_KEY = 'wavelength_contacts';
@@ -115,6 +118,37 @@
   }
   setInterval(() => { dialFreq.textContent = randomFreq(); }, 900);
 
+  // ---------- Back button confirmation (mobile & desktop) ----------
+  function pushChatHistoryState() {
+    if (!chatHistoryPushed) {
+      history.pushState({ screen: 'chat' }, '', location.href);
+      chatHistoryPushed = true;
+    }
+  }
+
+  window.addEventListener('popstate', () => {
+    if (!screens.chat.classList.contains('hidden')) {
+      const reallyLeave = confirm('Leave this chat and go back to the main screen?');
+      if (reallyLeave) {
+        chatHistoryPushed = false;
+        exitChatToLanding();
+      } else {
+        // user said no — re-trap the back button for next time
+        pushChatHistoryState();
+      }
+    }
+  });
+
+  function exitChatToLanding() {
+    if (ws) {
+      userInitiatedClose = true;
+      ws.send(JSON.stringify({ type: 'leave' }));
+      ws.close();
+    }
+    emojiPanel.classList.add('hidden');
+    showScreen('landing');
+  }
+
   // ---------- Sound + browser notification ----------
   let audioCtx = null;
   function playBeep() {
@@ -155,6 +189,7 @@
     ws = new WebSocket(`${proto}://${location.host}`);
 
     ws.addEventListener('open', () => {
+      reconnectAttempts = 0;
       const name = nameInput.value.trim();
       if (name) ws.send(JSON.stringify({ type: 'set_name', name }));
 
@@ -170,9 +205,29 @@
     });
 
     ws.addEventListener('close', () => {
-      if (!screens.landing.classList.contains('hidden')) return;
-      addSystemBubble('Connection lost. Reconnecting…');
+      if (userInitiatedClose) {
+        userInitiatedClose = false;
+        return;
+      }
+      if (screens.landing.classList.contains('hidden')) {
+        addSystemBubble('Connection lost. Reconnecting…');
+        attemptReconnect();
+      }
     });
+
+    ws.addEventListener('error', () => {
+      // 'close' fires right after 'error' too, so no extra handling needed here.
+    });
+  }
+
+  function attemptReconnect() {
+    reconnectAttempts += 1;
+    const delay = Math.min(1000 * reconnectAttempts, 5000); // backs off up to 5s
+    setTimeout(() => {
+      if (screens.landing.classList.contains('hidden')) {
+        connectSocket();
+      }
+    }, delay);
   }
 
   function handleServerMessage(msg) {
@@ -199,6 +254,7 @@
         chatLog.innerHTML = '';
         chatWithLabel.textContent = `Connected to ${currentStrangerName}`;
         showScreen('chat');
+        pushChatHistoryState();
         addSystemBubble("You're connected. Say hi 👋");
         leftToast.classList.add('hidden');
         notifyMatch(currentStrangerName);
@@ -299,7 +355,10 @@
 
   // ---------- Searching actions ----------
   cancelSearchBtn.addEventListener('click', () => {
-    if (ws) ws.close();
+    if (ws) {
+      userInitiatedClose = true;
+      ws.close();
+    }
     pendingConnectByCode = false;
     showScreen('landing');
   });
@@ -355,12 +414,8 @@
   });
 
   leaveBtn.addEventListener('click', () => {
-    if (ws) {
-      ws.send(JSON.stringify({ type: 'leave' }));
-      ws.close();
-    }
-    emojiPanel.classList.add('hidden');
-    showScreen('landing');
+    chatHistoryPushed = false;
+    exitChatToLanding();
   });
 
   toastFindBtn.addEventListener('click', () => {
