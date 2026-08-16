@@ -116,7 +116,24 @@ function tryConnectCode(ws, code) {
   }
 }
 
+function heartbeat() {
+  this.isAlive = true;
+}
+
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 25000);
+
+wss.on('close', () => clearInterval(heartbeatInterval));
+
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', heartbeat);
+
   names.set(ws, 'Stranger');
   broadcastOnlineCount();
 
