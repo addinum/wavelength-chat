@@ -84,7 +84,12 @@
 
   <form id="chatForm" class="chat-input-bar">
     <button type="button" id="emojiBtn" class="btn-emoji" aria-label="Emoji">😊</button>
-    <input type="text" id="chatInput" placeholder="Say something…" maxlength="2000" autocomplete="off">
+    <textarea
+  id="chatInput"
+  placeholder="Say something…"
+  maxlength="2000"
+  rows="1"
+></textarea>
     <button type="submit" class="btn-send" aria-label="Send">Send</button>
   </form>
 </section>
