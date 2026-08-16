@@ -305,6 +305,7 @@
     ws.send(JSON.stringify({ type: 'chat_message', text }));
     addBubble(text, 'me');
     chatInput.value = '';
+    chatInput.style.height = 'auto';
     emojiPanel.classList.add('hidden');
   });
 
@@ -314,6 +315,27 @@
     ws.send(JSON.stringify({ type: 'typing' }));
     typingTimeout = setTimeout(() => {}, 1000);
   });
+
+  chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = chatInput.scrollHeight + 'px';
+});
+
+  chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    chatForm.requestSubmit();
+  }
+});
+
+  chatInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    chatInput.scrollIntoView({
+      block: 'nearest',
+      behavior: 'smooth'
+    });
+  }, 200);
+});
 
   skipBtn.addEventListener('click', () => {
     if (!ws) return;
