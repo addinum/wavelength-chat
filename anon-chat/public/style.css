@@ -532,6 +532,11 @@ h1 {
   font-size: 16px; /* prevents iOS zoom on focus */
   outline: none;
   font-family: var(--font-body);
+  resize: none;
+  overflow-y: auto;
+  min-height: 24px;
+  max-height: 120px;
+  line-height: 1.5;
 }
 #chatInput:focus { border-color: var(--signal); }
 
