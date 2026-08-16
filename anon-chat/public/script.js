@@ -1,4 +1,29 @@
 (() => {
+  function generateUserId() {
+  return 'WVL_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+function generateUserTag() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let tag = '';
+  for (let i = 0; i < 4; i++) {
+    tag += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return tag;
+}
+
+let userId = localStorage.getItem('userId');
+let userTag = localStorage.getItem('userTag');
+
+if (!userId) {
+  userId = generateUserId();
+  localStorage.setItem('userId', userId);
+}
+
+if (!userTag) {
+  userTag = generateUserTag();
+  localStorage.setItem('userTag', userTag);
+}
   const screens = {
     landing: document.getElementById('landing'),
     searching: document.getElementById('searching'),
@@ -34,6 +59,7 @@
   const friendDeclineBtn = document.getElementById('friendDeclineBtn');
   const friendCodeToast = document.getElementById('friendCodeToast');
   const friendCodeText = document.getElementById('friendCodeText');
+  const userTagDisplay = document.getElementById('userTagDisplay');
 
   let ws = null;
   let typingTimeout = null;
@@ -106,6 +132,7 @@
   }
 
   renderContacts();
+  userTagDisplay.textContent = `Your tag: #${userTag}`;
 
   // ---------- Screen switching ----------
   function showScreen(name) {
