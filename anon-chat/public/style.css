@@ -441,6 +441,12 @@ h1 {
   animation: pop 0.15s ease-out;
 }
 
+.bubble a {
+  color: #4da3ff;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
 @keyframes pop {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
