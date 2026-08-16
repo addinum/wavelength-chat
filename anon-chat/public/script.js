@@ -239,12 +239,19 @@
   }
 
   function addBubble(text, who) {
-    const div = document.createElement('div');
-    div.className = `bubble bubble--${who}`;
-    div.textContent = text;
-    chatLog.appendChild(div);
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
+  const div = document.createElement('div');
+  div.className = `bubble bubble--${who}`;
+
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+  div.innerHTML = escapeHtml(text).replace(
+    urlRegex,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
 
   function addSystemBubble(text) {
     const div = document.createElement('div');
