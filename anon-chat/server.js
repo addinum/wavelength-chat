@@ -61,6 +61,8 @@ function broadcastOnlineCount() {
   });
 
   wss.clients.forEach((c) => {
+    console.log("SENDING TO CLIENT");
+
     if (c.readyState === WebSocket.OPEN) {
       c.send(payload);
     }
