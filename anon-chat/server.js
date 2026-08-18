@@ -53,9 +53,17 @@ function send(ws, type, payload = {}) {
 }
 
 function broadcastOnlineCount() {
-  const payload = JSON.stringify({ type: 'online_count', count: wss.clients.size });
+  console.log("ONLINE USERS:", wss.clients.size);
+
+  const payload = JSON.stringify({
+    type: 'online_count',
+    count: wss.clients.size
+  });
+
   wss.clients.forEach((c) => {
-    if (c.readyState === WebSocket.OPEN) c.send(payload);
+    if (c.readyState === WebSocket.OPEN) {
+      c.send(payload);
+    }
   });
 }
 
