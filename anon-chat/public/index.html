@@ -25,7 +25,6 @@
 
   <div class="landing-copy">
     <p class="eyebrow">no account · no login · fully anonymous</p>
-    <p class="user-tag" id="userTagDisplay"></p>
     <h1>Wavelength</h1>
     <p class="subhead">Tune in to a stranger. Talk for a minute or an hour. Switch frequency whenever you like.</p>
 
@@ -35,6 +34,10 @@
     </label>
 
     <button id="startBtn" class="btn-primary">Find a stranger</button>
+
+    <button id="inboxBtn" class="btn-secondary btn-inbox">
+      📥 Inbox <span id="inboxBadge" class="inbox-badge hidden">0</span>
+    </button>
 
     <div class="code-row">
       <input type="text" id="codeInput" placeholder="Have a friend code? Enter it" maxlength="12" autocomplete="off">
@@ -85,12 +88,39 @@
 
   <form id="chatForm" class="chat-input-bar">
     <button type="button" id="emojiBtn" class="btn-emoji" aria-label="Emoji">😊</button>
-    <textarea
-  id="chatInput"
-  placeholder="Say something…"
-  maxlength="2000"
-  rows="1"
-></textarea>
+    <input type="text" id="chatInput" placeholder="Say something…" maxlength="2000" autocomplete="off">
+    <button type="submit" class="btn-send" aria-label="Send">Send</button>
+  </form>
+</section>
+
+<!-- ===== INBOX SCREEN (persistent contacts, message anytime) ===== -->
+<section id="inbox" class="screen hidden">
+  <header class="chat-header">
+    <div class="chat-header__status"><span>📥 Inbox</span></div>
+    <div class="chat-header__actions">
+      <button id="inboxBackBtn" class="btn-chip">← Back</button>
+    </div>
+  </header>
+  <div class="inbox-list" id="inboxList">
+    <p class="inbox-empty" id="inboxEmpty">No contacts yet. Add someone from a chat with the 🤝 button.</p>
+  </div>
+</section>
+
+<!-- ===== THREAD SCREEN (message a specific contact anytime) ===== -->
+<section id="thread" class="screen hidden">
+  <header class="chat-header">
+    <div class="chat-header__status">
+      <span id="threadWithLabel">Contact</span>
+    </div>
+    <div class="chat-header__actions">
+      <button id="threadBackBtn" class="btn-chip">← Back</button>
+    </div>
+  </header>
+
+  <div class="chat-log" id="threadLog"></div>
+
+  <form id="threadForm" class="chat-input-bar">
+    <input type="text" id="threadInput" placeholder="Message this contact…" maxlength="2000" autocomplete="off">
     <button type="submit" class="btn-send" aria-label="Send">Send</button>
   </form>
 </section>

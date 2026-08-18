@@ -1,33 +1,10 @@
 (() => {
-  function generateUserId() {
-  return 'WVL_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-}
-
-function generateUserTag() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let tag = '';
-  for (let i = 0; i < 4; i++) {
-    tag += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return tag;
-}
-
-let userId = localStorage.getItem('userId');
-let userTag = localStorage.getItem('userTag');
-
-if (!userId) {
-  userId = generateUserId();
-  localStorage.setItem('userId', userId);
-}
-
-if (!userTag) {
-  userTag = generateUserTag();
-  localStorage.setItem('userTag', userTag);
-}
   const screens = {
     landing: document.getElementById('landing'),
     searching: document.getElementById('searching'),
     chat: document.getElementById('chat'),
+    inbox: document.getElementById('inbox'),
+    thread: document.getElementById('thread'),
   };
 
   const nameInput = document.getElementById('nameInput');
@@ -59,7 +36,17 @@ if (!userTag) {
   const friendDeclineBtn = document.getElementById('friendDeclineBtn');
   const friendCodeToast = document.getElementById('friendCodeToast');
   const friendCodeText = document.getElementById('friendCodeText');
-  const userTagDisplay = document.getElementById('userTagDisplay');
+
+  const inboxBtn = document.getElementById('inboxBtn');
+  const inboxBadge = document.getElementById('inboxBadge');
+  const inboxBackBtn = document.getElementById('inboxBackBtn');
+  const inboxList = document.getElementById('inboxList');
+  const inboxEmpty = document.getElementById('inboxEmpty');
+  const threadBackBtn = document.getElementById('threadBackBtn');
+  const threadWithLabel = document.getElementById('threadWithLabel');
+  const threadLog = document.getElementById('threadLog');
+  const threadForm = document.getElementById('threadForm');
+  const threadInput = document.getElementById('threadInput');
 
   let ws = null;
   let typingTimeout = null;
@@ -69,30 +56,26 @@ if (!userTag) {
   let chatHistoryPushed = false;
   let reconnectAttempts = 0;
   let userInitiatedClose = false;
+  let currentThreadContactId = null;
+  let latestContacts = [];
 
-  // ---------- Contacts (stored only in this browser's localStorage) ----------
-  const CONTACTS_KEY = 'wavelength_contacts';
-  const USER_ID_KEY = 'wavelength_user_id';
+  // ---------- Persistent device identity (for the inbox feature only) ----------
+  const DEVICE_ID_KEY = 'wavelength_device_id';
 
-function getUserId() {
-  let id = localStorage.getItem(USER_ID_KEY);
-
-  if (!id) {
-    id =
-      'USR_' +
-      Math.random().toString(36).substring(2, 10).toUpperCase();
-
-    localStorage.setItem(USER_ID_KEY, id);
+  function getDeviceId() {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : 'dev-' + Math.random().toString(36).slice(2) + Date.now());
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
   }
+  const myDeviceId = getDeviceId();
 
-  return id;
-}
+  // ---------- Contacts (legacy quick-reconnect codes, stored locally) ----------
+  const CONTACTS_KEY = 'wavelength_contacts';
 
-const myUserId = getUserId();
-
-console.log('My User ID:', myUserId);
-
-  function getContacts() {
+  function getLocalContacts() {
     try {
       return JSON.parse(localStorage.getItem(CONTACTS_KEY) || '[]');
     } catch {
@@ -100,21 +83,21 @@ console.log('My User ID:', myUserId);
     }
   }
 
-  function saveContact(code, name) {
-    const contacts = getContacts().filter((c) => c.code !== code);
+  function saveLocalContact(code, name) {
+    const contacts = getLocalContacts().filter((c) => c.code !== code);
     contacts.unshift({ code, name: name || 'Stranger', addedAt: Date.now() });
     localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts.slice(0, 30)));
-    renderContacts();
+    renderLocalContacts();
   }
 
-  function removeContact(code) {
-    const contacts = getContacts().filter((c) => c.code !== code);
+  function removeLocalContact(code) {
+    const contacts = getLocalContacts().filter((c) => c.code !== code);
     localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts));
-    renderContacts();
+    renderLocalContacts();
   }
 
-  function renderContacts() {
-    const contacts = getContacts();
+  function renderLocalContacts() {
+    const contacts = getLocalContacts();
     if (contacts.length === 0) {
       contactsSection.classList.add('hidden');
       return;
@@ -140,7 +123,7 @@ console.log('My User ID:', myUserId);
       });
     });
     contactsList.querySelectorAll('.contact-remove').forEach((btn) => {
-      btn.addEventListener('click', () => removeContact(btn.dataset.code));
+      btn.addEventListener('click', () => removeLocalContact(btn.dataset.code));
     });
   }
 
@@ -150,8 +133,7 @@ console.log('My User ID:', myUserId);
     return div.innerHTML;
   }
 
-  renderContacts();
-  userTagDisplay.textContent = `Your tag: #${userTag}`;
+  renderLocalContacts();
 
   // ---------- Screen switching ----------
   function showScreen(name) {
@@ -179,20 +161,18 @@ console.log('My User ID:', myUserId);
         chatHistoryPushed = false;
         exitChatToLanding();
       } else {
-        // user said no — re-trap the back button for next time
         pushChatHistoryState();
       }
     }
   });
 
   function exitChatToLanding() {
-    if (ws) {
-      userInitiatedClose = true;
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'leave' }));
-      ws.close();
     }
     emojiPanel.classList.add('hidden');
     showScreen('landing');
+    refreshInboxBadge();
   }
 
   // ---------- Sound + browser notification ----------
@@ -223,26 +203,34 @@ console.log('My User ID:', myUserId);
     }
   }
 
+  function notifyInboxMessage(name) {
+    playBeep();
+    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+      new Notification('Wavelength', { body: `New message from ${name}` });
+    }
+  }
+
   function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
   }
 
-  // ---------- WebSocket ----------
+  // ---------- WebSocket (single persistent connection for the whole app) ----------
   function connectSocket() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}`);
 
     ws.addEventListener('open', () => {
       reconnectAttempts = 0;
+      ws.send(JSON.stringify({ type: 'identify', deviceId: myDeviceId }));
       const name = nameInput.value.trim();
       if (name) ws.send(JSON.stringify({ type: 'set_name', name }));
+      refreshInboxBadge();
 
       if (pendingConnectByCode) {
         ws.send(JSON.stringify({ type: 'connect_code', code: pendingConnectByCode }));
-      } else {
-        ws.send(JSON.stringify({ type: 'find' }));
+        pendingConnectByCode = false;
       }
     });
 
@@ -255,25 +243,20 @@ console.log('My User ID:', myUserId);
         userInitiatedClose = false;
         return;
       }
-      if (screens.landing.classList.contains('hidden')) {
-        addSystemBubble('Connection lost. Reconnecting…');
-        attemptReconnect();
-      }
-    });
-
-    ws.addEventListener('error', () => {
-      // 'close' fires right after 'error' too, so no extra handling needed here.
+      attemptReconnect();
     });
   }
 
   function attemptReconnect() {
     reconnectAttempts += 1;
-    const delay = Math.min(1000 * reconnectAttempts, 5000); // backs off up to 5s
-    setTimeout(() => {
-      if (screens.landing.classList.contains('hidden')) {
-        connectSocket();
-      }
-    }, delay);
+    const delay = Math.min(1000 * reconnectAttempts, 5000);
+    setTimeout(connectSocket, delay);
+  }
+
+  function sendWs(type, payload = {}) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type, ...payload }));
+    }
   }
 
   function handleServerMessage(msg) {
@@ -295,7 +278,6 @@ console.log('My User ID:', myUserId);
         break;
 
       case 'matched':
-        pendingConnectByCode = false;
         currentStrangerName = msg.strangerName || 'Stranger';
         chatLog.innerHTML = '';
         chatWithLabel.textContent = `Connected to ${currentStrangerName}`;
@@ -308,7 +290,7 @@ console.log('My User ID:', myUserId);
         break;
 
       case 'chat_message':
-        addBubble(msg.text, 'stranger');
+        addBubble(chatLog, msg.text, 'stranger');
         hideTyping();
         break;
 
@@ -331,29 +313,59 @@ console.log('My User ID:', myUserId);
         break;
 
       case 'friend_code':
-        saveContact(msg.code, msg.strangerName);
-        friendCodeText.textContent = `Saved! Your code with ${msg.strangerName}: ${msg.code}`;
+        saveLocalContact(msg.code, msg.strangerName);
+        friendCodeText.textContent = `Saved! You can now message ${msg.strangerName} anytime from your Inbox.`;
         friendCodeToast.classList.remove('hidden');
-        addSystemBubble(`Saved as a contact. Reconnect anytime with code ${msg.code}.`);
+        addSystemBubble(`Saved as a contact. Message them anytime from your Inbox — no need to reconnect.`);
         setTimeout(() => friendCodeToast.classList.add('hidden'), 6000);
         break;
+
+      // ---- Inbox events ----
+      case 'contacts_list':
+        latestContacts = msg.contacts || [];
+        renderInboxList();
+        updateInboxBadge();
+        break;
+
+      case 'thread_history':
+        if (msg.contactId === currentThreadContactId) {
+          threadLog.innerHTML = '';
+          msg.messages.forEach((m) => {
+            addBubble(threadLog, m.text, m.fromId === myDeviceId ? 'me' : 'stranger');
+          });
+        }
+        break;
+
+      case 'inbox_message': {
+        const isForMe = msg.toId === myDeviceId;
+        const isFromMe = msg.fromId === myDeviceId;
+        const otherPartyId = isFromMe ? msg.toId : msg.fromId;
+
+        if (!screens.thread.classList.contains('hidden') && currentThreadContactId === otherPartyId) {
+          addBubble(threadLog, msg.text, isFromMe ? 'me' : 'stranger');
+        } else if (isForMe) {
+          const contact = latestContacts.find((c) => c.contactId === otherPartyId);
+          notifyInboxMessage(contact ? contact.name : 'a contact');
+        }
+        sendWs('get_contacts'); // refresh unread counts / previews
+        break;
+      }
     }
   }
 
-  function addBubble(text, who) {
-  const div = document.createElement('div');
-  div.className = `bubble bubble--${who}`;
+  function addBubble(logEl, text, who) {
+    const div = document.createElement('div');
+    div.className = `bubble bubble--${who}`;
 
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    div.innerHTML = escapeHtml(text).replace(
+      urlRegex,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
 
-  div.innerHTML = escapeHtml(text).replace(
-    urlRegex,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-  );
-
-  chatLog.appendChild(div);
-  chatLog.scrollTop = chatLog.scrollHeight;
-}
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
   function addSystemBubble(text) {
     const div = document.createElement('div');
@@ -372,6 +384,53 @@ console.log('My User ID:', myUserId);
     typingIndicator.classList.add('hidden');
   }
 
+  // ---------- Inbox rendering ----------
+  function updateInboxBadge() {
+    const totalUnread = latestContacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    if (totalUnread > 0) {
+      inboxBadge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+      inboxBadge.classList.remove('hidden');
+    } else {
+      inboxBadge.classList.add('hidden');
+    }
+  }
+
+  function refreshInboxBadge() {
+    sendWs('get_contacts');
+  }
+
+  function renderInboxList() {
+    inboxList.querySelectorAll('.inbox-row').forEach((el) => el.remove());
+    if (latestContacts.length === 0) {
+      inboxEmpty.classList.remove('hidden');
+      return;
+    }
+    inboxEmpty.classList.add('hidden');
+
+    latestContacts.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'inbox-row';
+      row.innerHTML = `
+        <div class="inbox-row__main">
+          <div class="inbox-row__name">${escapeHtml(c.name)}</div>
+          <div class="inbox-row__preview">${c.lastMessage ? escapeHtml(c.lastMessage) : 'Say hi…'}</div>
+        </div>
+        ${c.unreadCount > 0 ? `<span class="inbox-row__badge">${c.unreadCount}</span>` : ''}
+      `;
+      row.addEventListener('click', () => openThread(c.contactId, c.name));
+      inboxList.appendChild(row);
+    });
+  }
+
+  function openThread(contactId, name) {
+    currentThreadContactId = contactId;
+    threadWithLabel.textContent = name;
+    threadLog.innerHTML = '';
+    showScreen('thread');
+    sendWs('open_thread', { contactId });
+    threadInput.focus();
+  }
+
   // ---------- Landing actions ----------
   startBtn.addEventListener('click', () => {
     requestNotificationPermission();
@@ -379,20 +438,23 @@ console.log('My User ID:', myUserId);
     showScreen('searching');
     scanLabel.innerHTML = 'Scanning frequencies<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
     scanSub.textContent = 'Looking for someone else tuned in right now';
-    connectSocket();
+    sendWs('find');
   });
 
   nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startBtn.click();
+  });
+  nameInput.addEventListener('change', () => {
+    const name = nameInput.value.trim();
+    if (name) sendWs('set_name', { name });
   });
 
   codeBtn.addEventListener('click', () => {
     const code = codeInput.value.trim().toUpperCase();
     if (!code) return;
     requestNotificationPermission();
-    pendingConnectByCode = code;
     showScreen('searching');
-    connectSocket();
+    sendWs('connect_code', { code });
   });
 
   codeInput.addEventListener('keydown', (e) => {
@@ -401,59 +463,46 @@ console.log('My User ID:', myUserId);
 
   // ---------- Searching actions ----------
   cancelSearchBtn.addEventListener('click', () => {
-    if (ws) {
-      userInitiatedClose = true;
-      ws.close();
-    }
+    sendWs('leave');
     pendingConnectByCode = false;
     showScreen('landing');
   });
 
-  // ---------- Chat actions ----------
+  // ---------- Chat actions (live random/paired chat) ----------
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'chat_message', text }));
-    addBubble(text, 'me');
+    if (!text) return;
+    sendWs('chat_message', { text });
+    addBubble(chatLog, text, 'me');
     chatInput.value = '';
     chatInput.style.height = 'auto';
     emojiPanel.classList.add('hidden');
   });
 
   chatInput.addEventListener('input', () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    clearTimeout(typingTimeout);
-    ws.send(JSON.stringify({ type: 'typing' }));
-    typingTimeout = setTimeout(() => {}, 1000);
+    sendWs('typing');
+    chatInput.style.height = 'auto';
+    chatInput.style.height = chatInput.scrollHeight + 'px';
   });
 
-  chatInput.addEventListener('input', () => {
-  chatInput.style.height = 'auto';
-  chatInput.style.height = chatInput.scrollHeight + 'px';
-});
-
   chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    chatForm.requestSubmit();
-  }
-});
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      chatForm.requestSubmit();
+    }
+  });
 
   chatInput.addEventListener('focus', () => {
-  setTimeout(() => {
-    chatInput.scrollIntoView({
-      block: 'nearest',
-      behavior: 'smooth'
-    });
-  }, 200);
-});
+    setTimeout(() => {
+      chatInput.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 200);
+  });
 
   skipBtn.addEventListener('click', () => {
-    if (!ws) return;
     leftToast.classList.add('hidden');
     emojiPanel.classList.add('hidden');
-    ws.send(JSON.stringify({ type: 'skip' }));
+    sendWs('skip');
     showScreen('searching');
     scanLabel.innerHTML = 'Scanning frequencies<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
     scanSub.textContent = 'Looking for someone else tuned in right now';
@@ -466,26 +515,48 @@ console.log('My User ID:', myUserId);
 
   toastFindBtn.addEventListener('click', () => {
     leftToast.classList.add('hidden');
-    if (!ws) return;
-    ws.send(JSON.stringify({ type: 'find' }));
+    sendWs('find');
     showScreen('searching');
   });
 
   // ---------- Friend requests ----------
   friendBtn.addEventListener('click', () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'friend_request' }));
+    sendWs('friend_request');
     addSystemBubble('Contact request sent.');
   });
 
   friendAcceptBtn.addEventListener('click', () => {
     friendRequestToast.classList.add('hidden');
-    if (ws) ws.send(JSON.stringify({ type: 'friend_response', accepted: true }));
+    sendWs('friend_response', { accepted: true });
   });
 
   friendDeclineBtn.addEventListener('click', () => {
     friendRequestToast.classList.add('hidden');
-    if (ws) ws.send(JSON.stringify({ type: 'friend_response', accepted: false }));
+    sendWs('friend_response', { accepted: false });
+  });
+
+  // ---------- Inbox / Thread navigation ----------
+  inboxBtn.addEventListener('click', () => {
+    showScreen('inbox');
+    sendWs('get_contacts');
+  });
+
+  inboxBackBtn.addEventListener('click', () => {
+    showScreen('landing');
+  });
+
+  threadBackBtn.addEventListener('click', () => {
+    currentThreadContactId = null;
+    showScreen('inbox');
+    sendWs('get_contacts');
+  });
+
+  threadForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = threadInput.value.trim();
+    if (!text || !currentThreadContactId) return;
+    sendWs('send_inbox_message', { toDeviceId: currentThreadContactId, text });
+    threadInput.value = '';
   });
 
   // ---------- Emoji picker ----------
@@ -510,4 +581,7 @@ console.log('My User ID:', myUserId);
   emojiBtn.addEventListener('click', () => {
     emojiPanel.classList.toggle('hidden');
   });
+
+  // ---------- Boot ----------
+  connectSocket();
 })();
