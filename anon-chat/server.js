@@ -6,6 +6,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
+const db = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -45,6 +46,8 @@ let waitingQueue = [];       // sockets waiting for a random match
 const partners = new Map();  // ws -> partner ws
 const names = new Map();     // ws -> display name
 const codeWaiting = new Map(); // friend code -> ws waiting to be joined
+const deviceOnline = new Map(); // deviceId -> ws (for inbox delivery)
+const wsDeviceId = new Map();   // ws -> deviceId (reverse lookup)
 
 function send(ws, type, payload = {}) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -53,19 +56,9 @@ function send(ws, type, payload = {}) {
 }
 
 function broadcastOnlineCount() {
-  console.log("ONLINE USERS:", wss.clients.size);
-
-  const payload = JSON.stringify({
-    type: 'online_count',
-    count: wss.clients.size
-  });
-
+  const payload = JSON.stringify({ type: 'online_count', count: wss.clients.size });
   wss.clients.forEach((c) => {
-    console.log("SENDING TO CLIENT");
-
-    if (c.readyState === WebSocket.OPEN) {
-      c.send(payload);
-    }
+    if (c.readyState === WebSocket.OPEN) c.send(payload);
   });
 }
 
@@ -130,6 +123,9 @@ function heartbeat() {
   this.isAlive = true;
 }
 
+// Ping every client periodically. Browsers auto-reply with a pong, which
+// keeps the connection "active" so hosting proxies (like Render) don't
+// treat it as idle and drop it. Anyone who doesn't respond gets terminated.
 const heartbeatInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();
@@ -156,6 +152,14 @@ wss.on('connection', (ws) => {
     }
 
     switch (msg.type) {
+      case 'identify': {
+        const deviceId = String(msg.deviceId || '').slice(0, 64);
+        if (!deviceId) return;
+        wsDeviceId.set(ws, deviceId);
+        deviceOnline.set(deviceId, ws);
+        break;
+      }
+
       case 'set_name': {
         const clean = String(msg.name || '').slice(0, 24).trim();
         names.set(ws, clean || 'Stranger');
@@ -218,11 +222,66 @@ wss.on('connection', (ws) => {
         if (!partner) break;
         if (msg.accepted) {
           const code = generateCode();
-          send(ws, 'friend_code', { code, strangerName: names.get(partner) || 'Stranger' });
-          send(partner, 'friend_code', { code, strangerName: names.get(ws) || 'Stranger' });
+          const nameSelf = names.get(ws) || 'Stranger';
+          const namePartner = names.get(partner) || 'Stranger';
+
+          // Persist a real contact pair for the inbox feature, if both
+          // sides have identified with a deviceId. Fails silently and
+          // harmlessly if no database is configured yet.
+          const idSelf = wsDeviceId.get(ws);
+          const idPartner = wsDeviceId.get(partner);
+          if (idSelf && idPartner) {
+            db.saveContactPair(idSelf, nameSelf, idPartner, namePartner).catch(() => {});
+          }
+
+          send(ws, 'friend_code', { code, strangerName: namePartner });
+          send(partner, 'friend_code', { code, strangerName: nameSelf });
         } else {
           send(partner, 'friend_response', { accepted: false });
         }
+        break;
+      }
+
+      case 'get_contacts': {
+        const myId = wsDeviceId.get(ws);
+        if (!myId) { send(ws, 'contacts_list', { contacts: [] }); break; }
+        db.getContacts(myId).then((contacts) => {
+          send(ws, 'contacts_list', { contacts });
+        });
+        break;
+      }
+
+      case 'open_thread': {
+        const myId = wsDeviceId.get(ws);
+        const theirId = String(msg.contactId || '');
+        if (!myId || !theirId) break;
+        db.markThreadRead(theirId, myId).then(() => {
+          db.getThread(myId, theirId).then((messages) => {
+            send(ws, 'thread_history', { contactId: theirId, messages });
+          });
+        });
+        break;
+      }
+
+      case 'send_inbox_message': {
+        const myId = wsDeviceId.get(ws);
+        const toId = String(msg.toDeviceId || '');
+        const text = String(msg.text || '').slice(0, 2000).trim();
+        if (!myId || !toId || !text) break;
+
+        db.saveMessage(myId, toId, text).then((saved) => {
+          const payload = {
+            fromId: myId,
+            toId,
+            text,
+            createdAt: saved ? saved.createdAt : new Date(),
+          };
+          // Ack the sender so their UI updates immediately.
+          send(ws, 'inbox_message', payload);
+          // Push live to the recipient if they're currently online.
+          const recipientWs = deviceOnline.get(toId);
+          if (recipientWs) send(recipientWs, 'inbox_message', payload);
+        });
         break;
       }
     }
@@ -233,9 +292,14 @@ wss.on('connection', (ws) => {
     removeFromQueue(ws);
     removeFromCodeWaiting(ws);
     names.delete(ws);
+    const deviceId = wsDeviceId.get(ws);
+    if (deviceId && deviceOnline.get(deviceId) === ws) deviceOnline.delete(deviceId);
+    wsDeviceId.delete(ws);
     broadcastOnlineCount();
   });
 });
+
+db.connect();
 
 server.listen(PORT, () => {
   console.log(`Anonymous chat server running at http://localhost:${PORT}`);
