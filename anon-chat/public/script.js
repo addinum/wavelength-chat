@@ -72,6 +72,25 @@ if (!userTag) {
 
   // ---------- Contacts (stored only in this browser's localStorage) ----------
   const CONTACTS_KEY = 'wavelength_contacts';
+  const USER_ID_KEY = 'wavelength_user_id';
+
+function getUserId() {
+  let id = localStorage.getItem(USER_ID_KEY);
+
+  if (!id) {
+    id =
+      'USR_' +
+      Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    localStorage.setItem(USER_ID_KEY, id);
+  }
+
+  return id;
+}
+
+const myUserId = getUserId();
+
+console.log('My User ID:', myUserId);
 
   function getContacts() {
     try {
