@@ -30,7 +30,7 @@
 
     <label class="name-field">
       <span>What should we call you?</span>
-      <input type="text" id="nameInput" placeholder="Leave blank to stay Stranger" maxlength="24" autocomplete="off">
+      <input type="search" id="wlHandleInput" name="wl-handle-x7" placeholder="Leave blank to stay Stranger" maxlength="24" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="done">
     </label>
 
     <button id="startBtn" class="btn-primary">Find a stranger</button>
@@ -40,7 +40,7 @@
     </button>
 
     <div class="code-row">
-      <input type="text" id="codeInput" placeholder="Have a friend code? Enter it" maxlength="12" autocomplete="off">
+      <input type="search" id="wlJoinCodeInput" name="wl-joincode-y3" placeholder="Have a friend code? Enter it" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="go">
       <button id="codeBtn" class="btn-secondary">Connect</button>
     </div>
 
@@ -88,7 +88,7 @@
 
   <form id="chatForm" class="chat-input-bar" autocomplete="off">
     <button type="button" id="emojiBtn" class="btn-emoji" aria-label="Emoji">😊</button>
-    <input type="text" id="chatInput" name="wl-chat-msg-a1" placeholder="Say something…" maxlength="2000" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other">
+    <input type="search" id="chatInput" name="wl-chat-msg-a1" placeholder="Say something…" maxlength="2000" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="send">
     <button type="submit" class="btn-send" aria-label="Send">Send</button>
   </form>
 </section>
@@ -115,7 +115,7 @@
   <div class="wa-log" id="threadLog"></div>
 
   <form id="threadForm" class="wa-input-bar" autocomplete="off">
-    <input type="text" id="threadInput" name="wl-thread-msg-b2" placeholder="Message" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" maxlength="2000">
+    <input type="search" id="threadInput" name="wl-thread-msg-b2" placeholder="Message" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="send" maxlength="2000">
     <button type="submit" class="wa-send" aria-label="Send">➤</button>
   </form>
 </section>

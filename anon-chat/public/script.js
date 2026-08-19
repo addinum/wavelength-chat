@@ -7,9 +7,9 @@
     thread: document.getElementById('thread'),
   };
 
-  const nameInput = document.getElementById('nameInput');
+  const nameInput = document.getElementById('wlHandleInput');
   const startBtn = document.getElementById('startBtn');
-  const codeInput = document.getElementById('codeInput');
+  const codeInput = document.getElementById('wlJoinCodeInput');
   const codeBtn = document.getElementById('codeBtn');
   const cancelSearchBtn = document.getElementById('cancelSearchBtn');
   const skipBtn = document.getElementById('skipBtn');
