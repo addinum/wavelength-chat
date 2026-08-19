@@ -259,7 +259,19 @@ wss.on('connection', (ws) => {
           db.getThread(myId, theirId).then((messages) => {
             send(ws, 'thread_history', { contactId: theirId, messages });
           });
+          // Tell the other person (if online) that their messages were just read.
+          const theirWs = deviceOnline.get(theirId);
+          if (theirWs) send(theirWs, 'read_receipt', { byId: myId });
         });
+        break;
+      }
+
+      case 'inbox_typing': {
+        const myId = wsDeviceId.get(ws);
+        const toId = String(msg.toDeviceId || '');
+        if (!myId || !toId) break;
+        const recipientWs = deviceOnline.get(toId);
+        if (recipientWs) send(recipientWs, 'inbox_typing', { fromId: myId });
         break;
       }
 
@@ -271,6 +283,7 @@ wss.on('connection', (ws) => {
 
         db.saveMessage(myId, toId, text).then((saved) => {
           const payload = {
+            id: saved && saved._id ? String(saved._id) : `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             fromId: myId,
             toId,
             text,

@@ -366,8 +366,9 @@
         if (msg.contactId === currentThreadContactId) {
           threadLog.innerHTML = '';
           msg.messages.forEach((m) => {
-            addThreadBubble(m.text, m.fromId === myDeviceId ? 'me' : 'them', m.createdAt);
+            addThreadBubble(m.text, m.fromId === myDeviceId ? 'me' : 'them', m.createdAt, m._id || m.id);
           });
+          if (msg.messages.some((m) => m.fromId === myDeviceId)) markThreadBubblesRead();
         }
         break;
 
@@ -377,7 +378,8 @@
         const otherPartyId = isFromMe ? msg.toId : msg.fromId;
 
         if (!screens.thread.classList.contains('hidden') && currentThreadContactId === otherPartyId) {
-          addThreadBubble(msg.text, isFromMe ? 'me' : 'them', msg.createdAt);
+          hideThreadTyping();
+          addThreadBubble(msg.text, isFromMe ? 'me' : 'them', msg.createdAt, msg.id);
         } else if (isForMe) {
           const contact = latestContacts.find((c) => c.contactId === otherPartyId);
           notifyInboxMessage(contact ? contact.name : 'a contact');
@@ -385,6 +387,18 @@
         sendWs('get_contacts'); // refresh unread counts / previews
         break;
       }
+
+      case 'inbox_typing':
+        if (!screens.thread.classList.contains('hidden') && currentThreadContactId === msg.fromId) {
+          showThreadTyping();
+        }
+        break;
+
+      case 'read_receipt':
+        if (!screens.thread.classList.contains('hidden') && currentThreadContactId === msg.byId) {
+          markThreadBubblesRead();
+        }
+        break;
     }
   }
 
@@ -402,8 +416,8 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // WhatsApp-style bubble for the Inbox/Thread screen (includes a timestamp).
-  function addThreadBubble(text, who, timestamp) {
+  // WhatsApp-style bubble for the Inbox/Thread screen (includes timestamp + read ticks).
+  function addThreadBubble(text, who, timestamp, msgId) {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const linked = escapeHtml(text).replace(
       urlRegex,
@@ -415,11 +429,44 @@
 
     const bubble = document.createElement('div');
     bubble.className = `wa-bubble wa-bubble--${who === 'me' ? 'me' : 'them'}`;
-    bubble.innerHTML = `<span class="wa-bubble__text">${linked}</span><span class="wa-bubble__time">${formatBubbleTime(timestamp || Date.now())}</span>`;
+    if (msgId) bubble.dataset.msgId = msgId;
+
+    const tickHtml = who === 'me' ? '<span class="wa-tick">✓</span>' : '';
+    bubble.innerHTML = `<span class="wa-bubble__text">${linked}</span><span class="wa-bubble__time">${formatBubbleTime(timestamp || Date.now())}${tickHtml}</span>`;
 
     row.appendChild(bubble);
     threadLog.appendChild(row);
     threadLog.scrollTop = threadLog.scrollHeight;
+  }
+
+  function markThreadBubblesRead() {
+    threadLog.querySelectorAll('.wa-bubble--me .wa-tick').forEach((tick) => {
+      tick.textContent = '✓✓';
+      tick.classList.add('wa-tick--read');
+    });
+  }
+
+  // ---------- Inbox typing indicator ----------
+  let threadTypingRow = null;
+  let threadTypingHideTimeout = null;
+
+  function showThreadTyping() {
+    if (!threadTypingRow) {
+      threadTypingRow = document.createElement('div');
+      threadTypingRow.className = 'wa-typing-row';
+      threadTypingRow.innerHTML = '<div class="wa-typing-bubble"><span></span><span></span><span></span></div>';
+      threadLog.appendChild(threadTypingRow);
+      threadLog.scrollTop = threadLog.scrollHeight;
+    }
+    clearTimeout(threadTypingHideTimeout);
+    threadTypingHideTimeout = setTimeout(hideThreadTyping, 2500);
+  }
+
+  function hideThreadTyping() {
+    if (threadTypingRow) {
+      threadTypingRow.remove();
+      threadTypingRow = null;
+    }
   }
 
   function addSystemBubble(text) {
@@ -490,6 +537,7 @@
     threadAvatar.textContent = avatarInitial(name);
     threadAvatar.style.background = avatarColorFor(name);
     threadLog.innerHTML = '';
+    threadTypingRow = null;
     showScreen('thread');
     sendWs('open_thread', { contactId });
     threadInput.focus();
@@ -615,6 +663,14 @@
     sendWs('get_contacts');
   });
 
+  let threadTypingSendTimeout = null;
+  threadInput.addEventListener('input', () => {
+    if (!currentThreadContactId) return;
+    if (threadTypingSendTimeout) return; // throttle to once per ~1.2s
+    sendWs('inbox_typing', { toDeviceId: currentThreadContactId });
+    threadTypingSendTimeout = setTimeout(() => { threadTypingSendTimeout = null; }, 1200);
+  });
+
   threadForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = threadInput.value.trim();
@@ -645,6 +701,18 @@
   emojiBtn.addEventListener('click', () => {
     emojiPanel.classList.toggle('hidden');
   });
+
+  // ---------- Real visible viewport height (fixes Android keyboard overlay gap) ----------
+  function setAppHeight() {
+    const vv = window.visualViewport;
+    const h = vv ? vv.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${h}px`);
+  }
+  setAppHeight();
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setAppHeight);
+  }
+  window.addEventListener('resize', setAppHeight);
 
   // ---------- Boot ----------
   connectSocket();

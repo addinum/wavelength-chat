@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Wavelength — Anonymous Chat</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -86,9 +86,9 @@
 
   <div class="emoji-panel hidden" id="emojiPanel"></div>
 
-  <form id="chatForm" class="chat-input-bar">
+  <form id="chatForm" class="chat-input-bar" autocomplete="off">
     <button type="button" id="emojiBtn" class="btn-emoji" aria-label="Emoji">😊</button>
-    <input type="text" id="chatInput" placeholder="Say something…" maxlength="2000" autocomplete="off">
+    <input type="text" id="chatInput" name="wl-chat-msg-a1" placeholder="Say something…" maxlength="2000" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other">
     <button type="submit" class="btn-send" aria-label="Send">Send</button>
   </form>
 </section>
@@ -114,8 +114,8 @@
 
   <div class="wa-log" id="threadLog"></div>
 
-  <form id="threadForm" class="wa-input-bar">
-    <input type="text" id="threadInput" placeholder="Message" autocomplete="off" maxlength="2000">
+  <form id="threadForm" class="wa-input-bar" autocomplete="off">
+    <input type="text" id="threadInput" name="wl-thread-msg-b2" placeholder="Message" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" maxlength="2000">
     <button type="submit" class="wa-send" aria-label="Send">➤</button>
   </form>
 </section>
