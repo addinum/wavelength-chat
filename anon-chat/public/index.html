@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Wavelength — Anonymous Chat</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== LANDING SCREEN ===== -->
+<section id="landing" class="screen">
+  <p class="online-count" id="onlineCount">— people online now</p>
+
+  <div class="dial-visual" aria-hidden="true">
+    <div class="ring ring--outer"></div>
+    <div class="ring ring--mid"></div>
+    <div class="ring ring--inner"></div>
+    <div class="dial-needle"></div>
+    <div class="dial-center">
+      <span class="dial-freq" id="dialFreq">88.0</span>
+      <span class="dial-unit">FM</span>
+    </div>
+  </div>
+
+  <div class="landing-copy">
+    <p class="eyebrow">no account · no login · fully anonymous</p>
+    <h1>Wavelength</h1>
+    <p class="subhead">Tune in to a stranger. Talk for a minute or an hour. Switch frequency whenever you like.</p>
+
+    <label class="name-field">
+      <span>What should we call you?</span>
+      <input type="search" id="wlHandleInput" name="wl-handle-x7" placeholder="Leave blank to stay Stranger" maxlength="24" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="done">
+    </label>
+
+    <button id="startBtn" class="btn-primary">Find a stranger</button>
+
+    <button id="inboxBtn" class="btn-secondary btn-inbox">
+      📥 Inbox <span id="inboxBadge" class="inbox-badge hidden">0</span>
+    </button>
+
+    <div class="code-row">
+      <input type="search" id="wlJoinCodeInput" name="wl-joincode-y3" placeholder="Have a friend code? Enter it" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="go">
+      <button id="codeBtn" class="btn-secondary">Connect</button>
+    </div>
+
+    <p class="fine-print">By continuing you agree not to share personal contact details. Be kind — someone real is on the other end.</p>
+  </div>
+
+  <!-- Saved contacts (stored only in this browser, never on a server) -->
+  <div class="contacts" id="contactsSection">
+    <p class="contacts-title">Your saved contacts</p>
+    <div class="contacts-list" id="contactsList"></div>
+  </div>
+</section>
+
+<!-- ===== SEARCHING SCREEN ===== -->
+<section id="searching" class="screen hidden">
+  <div class="scan-visual" aria-hidden="true">
+    <div class="scan-bar">
+      <div class="scan-sweep"></div>
+    </div>
+  </div>
+  <p class="scan-label" id="scanLabel">Scanning frequencies<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+  <p class="scan-sub" id="scanSub">Looking for someone else tuned in right now</p>
+  <button id="cancelSearchBtn" class="btn-ghost">Cancel</button>
+</section>
+
+<!-- ===== CHAT SCREEN ===== -->
+<section id="chat" class="screen hidden">
+  <header class="chat-header">
+    <div class="chat-header__status">
+      <span class="signal-dot" id="signalDot"></span>
+      <span id="chatWithLabel">Connected to Stranger</span>
+    </div>
+    <div class="chat-header__actions">
+      <button id="friendBtn" class="btn-chip" title="Send friend request">🤝</button>
+      <button id="skipBtn" class="btn-chip">Next →</button>
+      <button id="leaveBtn" class="btn-chip btn-chip--muted">Leave</button>
+    </div>
+  </header>
+
+  <div class="chat-log" id="chatLog"></div>
+
+  <div class="typing-indicator hidden" id="typingIndicator">stranger is typing…</div>
+
+  <div class="emoji-panel hidden" id="emojiPanel"></div>
+
+  <form id="chatForm" class="chat-input-bar" autocomplete="off">
+    <button type="button" id="emojiBtn" class="btn-emoji" aria-label="Emoji">😊</button>
+    <input type="search" id="chatInput" name="wl-chat-msg-a1" placeholder="Say something…" maxlength="2000" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="send">
+    <button type="submit" class="btn-send" aria-label="Send">Send</button>
+  </form>
+</section>
+
+<!-- ===== INBOX SCREEN (persistent contacts, message anytime) ===== -->
+<section id="inbox" class="screen hidden">
+  <header class="wa-header">
+    <button id="inboxBackBtn" class="wa-back" aria-label="Back">←</button>
+    <span class="wa-header__title">Chats</span>
+  </header>
+  <div class="inbox-list" id="inboxList">
+    <p class="inbox-empty" id="inboxEmpty">No contacts yet. Add someone from a chat with the 🤝 button.</p>
+  </div>
+</section>
+
+<!-- ===== THREAD SCREEN (message a specific contact anytime) ===== -->
+<section id="thread" class="screen hidden">
+  <header class="wa-header">
+    <button id="threadBackBtn" class="wa-back" aria-label="Back">←</button>
+    <span class="wa-avatar" id="threadAvatar">?</span>
+    <span class="wa-header__title" id="threadWithLabel">Contact</span>
+  </header>
+
+  <div class="wa-log" id="threadLog"></div>
+
+  <form id="threadForm" class="wa-input-bar" autocomplete="off">
+    <input type="search" id="threadInput" name="wl-thread-msg-b2" placeholder="Message" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="send" maxlength="2000">
+    <button type="submit" class="wa-send" aria-label="Send">➤</button>
+  </form>
+</section>
+
+<!-- ===== TOASTS / MODALS ===== -->
+<div id="leftToast" class="toast hidden">
+  <span>The stranger disconnected.</span>
+  <button id="toastFindBtn" class="btn-chip">Find another</button>
+</div>
+
+<div id="friendRequestToast" class="toast toast--modal hidden">
+  <span id="friendRequestText">Stranger wants to add you as a contact</span>
+  <div class="toast-actions">
+    <button id="friendAcceptBtn" class="btn-chip">Accept</button>
+    <button id="friendDeclineBtn" class="btn-chip btn-chip--muted">Decline</button>
+  </div>
+</div>
+
+<div id="friendCodeToast" class="toast hidden">
+  <span id="friendCodeText">Saved as a contact!</span>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
