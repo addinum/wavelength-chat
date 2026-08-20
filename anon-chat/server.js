@@ -314,6 +314,6 @@ wss.on('connection', (ws) => {
 
 db.connect();
 
-server.listen(PORT, () => {
-  console.log(`Anonymous chat server running at http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Anonymous chat server running on port ${PORT}`);
 });
