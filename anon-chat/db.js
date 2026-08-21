@@ -17,7 +17,10 @@ contactSchema.index({ ownerId: 1, contactId: 1 }, { unique: true });
 const messageSchema = new mongoose.Schema({
   fromId: { type: String, required: true, index: true },
   toId: { type: String, required: true, index: true },
-  text: { type: String, required: true },
+  msgType: { type: String, enum: ['text', 'voice'], default: 'text' },
+  text: { type: String, default: '' },
+  audioData: { type: String, default: null }, // base64-encoded audio, voice notes only
+  duration: { type: Number, default: null },  // seconds, voice notes only
   createdAt: { type: Date, default: Date.now },
   read: { type: Boolean, default: false },
 });
@@ -85,7 +88,7 @@ async function getContacts(ownerId) {
         contactId: c.contactId,
         name: c.contactName,
         unreadCount,
-        lastMessage: lastMsg ? lastMsg.text : null,
+        lastMessage: lastMsg ? (lastMsg.msgType === 'voice' ? '🎤 Voice message' : lastMsg.text) : null,
         lastAt: lastMsg ? lastMsg.createdAt : c.createdAt,
       });
     }
@@ -101,10 +104,21 @@ async function getContacts(ownerId) {
 async function saveMessage(fromId, toId, text) {
   if (!isReady()) return null;
   try {
-    const msg = await Message.create({ fromId, toId, text });
+    const msg = await Message.create({ fromId, toId, msgType: 'text', text });
     return msg;
   } catch (err) {
     console.error('saveMessage failed:', err.message);
+    return null;
+  }
+}
+
+async function saveVoiceMessage(fromId, toId, audioData, duration) {
+  if (!isReady()) return null;
+  try {
+    const msg = await Message.create({ fromId, toId, msgType: 'voice', audioData, duration });
+    return msg;
+  } catch (err) {
+    console.error('saveVoiceMessage failed:', err.message);
     return null;
   }
 }
@@ -140,6 +154,7 @@ module.exports = {
   saveContactPair,
   getContacts,
   saveMessage,
+  saveVoiceMessage,
   getThread,
   markThreadRead,
 };

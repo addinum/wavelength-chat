@@ -8,6 +8,12 @@
 </head>
 <body>
 
+<!-- Ambient background glow + floating particles (decorative, CSS-driven) -->
+<div class="bg-glow" aria-hidden="true"></div>
+<div class="bg-particles" aria-hidden="true">
+  <span></span><span></span><span></span><span></span><span></span><span></span>
+</div>
+
 <!-- ===== LANDING SCREEN ===== -->
 <section id="landing" class="screen">
   <p class="online-count" id="onlineCount">— people online now</p>
@@ -24,19 +30,25 @@
   </div>
 
   <div class="landing-copy">
-    <p class="eyebrow">no account · no login · fully anonymous</p>
+    <div class="badge-row">
+      <span class="badge-pill">🎭 No account</span>
+      <span class="badge-dot">•</span>
+      <span class="badge-pill">🛡️ No login</span>
+      <span class="badge-dot">•</span>
+      <span class="badge-pill">🔒 Fully anonymous</span>
+    </div>
     <h1>Wavelength</h1>
-    <p class="subhead">Tune in to a stranger. Talk for a minute or an hour. Switch frequency whenever you like.</p>
+    <p class="subhead">Tune in to a stranger. Talk for a minute or an hour. Switch frequency <span class="accent-text">whenever you like</span>.</p>
 
     <label class="name-field">
       <span>What should we call you?</span>
       <input type="search" id="wlHandleInput" name="wl-handle-x7" placeholder="Leave blank to stay Stranger" maxlength="24" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="done">
     </label>
 
-    <button id="startBtn" class="btn-primary">Find a stranger</button>
+    <button id="startBtn" class="btn-primary"><span class="btn-icon">🎙️</span> Find a stranger <span class="btn-arrow">→</span></button>
 
     <button id="inboxBtn" class="btn-secondary btn-inbox">
-      📥 Inbox <span id="inboxBadge" class="inbox-badge hidden">0</span>
+      <span class="btn-icon">💬</span> Inbox <span id="inboxBadge" class="inbox-badge hidden">0</span> <span class="btn-arrow">→</span>
     </button>
 
     <div class="code-row">
@@ -114,8 +126,18 @@
 
   <div class="wa-log" id="threadLog"></div>
 
+  <!-- Voice recording overlay bar (shown instead of the normal input while recording) -->
+  <div class="wa-record-bar hidden" id="recordBar">
+    <button type="button" id="recordCancelBtn" class="wa-record-cancel" aria-label="Cancel recording">✕</button>
+    <span class="wa-record-dot" aria-hidden="true"></span>
+    <span class="wa-record-time" id="recordTime">0:00</span>
+    <span class="wa-record-hint">Recording voice note…</span>
+    <button type="button" id="recordSendBtn" class="wa-record-send" aria-label="Send voice note">➤</button>
+  </div>
+
   <form id="threadForm" class="wa-input-bar" autocomplete="off">
     <input type="search" id="threadInput" name="wl-thread-msg-b2" placeholder="Message" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other" enterkeyhint="send" maxlength="2000">
+    <button type="button" id="micBtn" class="wa-mic" aria-label="Record voice note">🎤</button>
     <button type="submit" class="wa-send" aria-label="Send">➤</button>
   </form>
 </section>

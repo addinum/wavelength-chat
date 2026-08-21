@@ -284,6 +284,7 @@ wss.on('connection', (ws) => {
         db.saveMessage(myId, toId, text).then((saved) => {
           const payload = {
             id: saved && saved._id ? String(saved._id) : `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            msgType: 'text',
             fromId: myId,
             toId,
             text,
@@ -292,6 +293,38 @@ wss.on('connection', (ws) => {
           // Ack the sender so their UI updates immediately.
           send(ws, 'inbox_message', payload);
           // Push live to the recipient if they're currently online.
+          const recipientWs = deviceOnline.get(toId);
+          if (recipientWs) send(recipientWs, 'inbox_message', payload);
+        });
+        break;
+      }
+
+      case 'send_inbox_voice': {
+        const myId = wsDeviceId.get(ws);
+        const toId = String(msg.toDeviceId || '');
+        const audioData = String(msg.audioData || '');
+        const duration = Math.min(Number(msg.duration) || 0, 120); // hard cap at 120s server-side
+
+        // Guard rails: cap raw size (~2MB base64) and require a sane duration,
+        // so one bad client can't blow through the free MongoDB storage tier.
+        const MAX_AUDIO_BASE64_LENGTH = 2 * 1024 * 1024;
+        if (!myId || !toId || !audioData || duration <= 0) break;
+        if (audioData.length > MAX_AUDIO_BASE64_LENGTH) {
+          send(ws, 'voice_note_rejected', { reason: 'Voice note too large (max ~90 seconds).' });
+          break;
+        }
+
+        db.saveVoiceMessage(myId, toId, audioData, duration).then((saved) => {
+          const payload = {
+            id: saved && saved._id ? String(saved._id) : `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            msgType: 'voice',
+            fromId: myId,
+            toId,
+            audioData,
+            duration,
+            createdAt: saved ? saved.createdAt : new Date(),
+          };
+          send(ws, 'inbox_message', payload);
           const recipientWs = deviceOnline.get(toId);
           if (recipientWs) send(recipientWs, 'inbox_message', payload);
         });
@@ -314,6 +347,6 @@ wss.on('connection', (ws) => {
 
 db.connect();
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Anonymous chat server running on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Anonymous chat server running at http://localhost:${PORT}`);
 });

@@ -48,6 +48,11 @@
   const threadLog = document.getElementById('threadLog');
   const threadForm = document.getElementById('threadForm');
   const threadInput = document.getElementById('threadInput');
+  const micBtn = document.getElementById('micBtn');
+  const recordBar = document.getElementById('recordBar');
+  const recordTime = document.getElementById('recordTime');
+  const recordCancelBtn = document.getElementById('recordCancelBtn');
+  const recordSendBtn = document.getElementById('recordSendBtn');
 
   let ws = null;
   let typingTimeout = null;
@@ -366,7 +371,12 @@
         if (msg.contactId === currentThreadContactId) {
           threadLog.innerHTML = '';
           msg.messages.forEach((m) => {
-            addThreadBubble(m.text, m.fromId === myDeviceId ? 'me' : 'them', m.createdAt, m._id || m.id);
+            const who = m.fromId === myDeviceId ? 'me' : 'them';
+            if (m.msgType === 'voice') {
+              addVoiceBubble(m.audioData, m.duration, who, m.createdAt, m._id || m.id);
+            } else {
+              addThreadBubble(m.text, who, m.createdAt, m._id || m.id);
+            }
           });
           if (msg.messages.some((m) => m.fromId === myDeviceId)) markThreadBubblesRead();
         }
@@ -376,10 +386,15 @@
         const isForMe = msg.toId === myDeviceId;
         const isFromMe = msg.fromId === myDeviceId;
         const otherPartyId = isFromMe ? msg.toId : msg.fromId;
+        const who = isFromMe ? 'me' : 'them';
 
         if (!screens.thread.classList.contains('hidden') && currentThreadContactId === otherPartyId) {
           hideThreadTyping();
-          addThreadBubble(msg.text, isFromMe ? 'me' : 'them', msg.createdAt, msg.id);
+          if (msg.msgType === 'voice') {
+            addVoiceBubble(msg.audioData, msg.duration, who, msg.createdAt, msg.id);
+          } else {
+            addThreadBubble(msg.text, who, msg.createdAt, msg.id);
+          }
         } else if (isForMe) {
           const contact = latestContacts.find((c) => c.contactId === otherPartyId);
           notifyInboxMessage(contact ? contact.name : 'a contact');
@@ -387,6 +402,10 @@
         sendWs('get_contacts'); // refresh unread counts / previews
         break;
       }
+
+      case 'voice_note_rejected':
+        addSystemBubble(msg.reason || "Couldn't send that voice note.");
+        break;
 
       case 'inbox_typing':
         if (!screens.thread.classList.contains('hidden') && currentThreadContactId === msg.fromId) {
@@ -437,6 +456,81 @@
     row.appendChild(bubble);
     threadLog.appendChild(row);
     threadLog.scrollTop = threadLog.scrollHeight;
+  }
+
+  // Voice note bubble: play/pause button + a decorative waveform that fills
+  // in as playback progresses, using the audio element's real currentTime.
+  function addVoiceBubble(audioData, duration, who, timestamp, msgId) {
+    const row = document.createElement('div');
+    row.className = `wa-bubble-row wa-bubble-row--${who === 'me' ? 'me' : 'them'}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = `wa-bubble wa-bubble--${who === 'me' ? 'me' : 'them'}`;
+    if (msgId) bubble.dataset.msgId = msgId;
+
+    const barCount = 28;
+    let bars = '';
+    for (let i = 0; i < barCount; i++) {
+      // Deterministic pseudo-random heights so it looks like a waveform.
+      const h = 6 + Math.round(14 * Math.abs(Math.sin(i * 12.9898 + (msgId ? msgId.length : 1))));
+      bars += `<span style="height:${h}px" data-bar="${i}"></span>`;
+    }
+
+    const tickHtml = who === 'me' ? '<span class="wa-tick">✓</span>' : '';
+    bubble.innerHTML = `
+      <div class="wa-voice-bubble">
+        <button type="button" class="wa-voice-play">▶</button>
+        <div class="wa-voice-waveform">${bars}</div>
+        <span class="wa-voice-duration">${formatDuration(duration)}</span>
+      </div>
+      <span class="wa-bubble__time">${formatBubbleTime(timestamp || Date.now())}${tickHtml}</span>
+    `;
+
+    const audio = new Audio(audioData);
+    const playBtn = bubble.querySelector('.wa-voice-play');
+    const waveformBars = bubble.querySelectorAll('.wa-voice-waveform span');
+    const durationLabel = bubble.querySelector('.wa-voice-duration');
+
+    playBtn.addEventListener('click', () => {
+      if (audio.paused) {
+        // Pause any other currently-playing voice note first.
+        document.querySelectorAll('audio[data-wl-playing]').forEach((el) => {
+          if (el !== audio) { el.pause(); el.currentTime = 0; }
+        });
+        audio.play().catch(() => {});
+        audio.dataset.wlPlaying = 'true';
+        playBtn.textContent = '⏸';
+      } else {
+        audio.pause();
+        playBtn.textContent = '▶';
+      }
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      const progress = audio.duration ? audio.currentTime / audio.duration : 0;
+      const filledCount = Math.round(progress * barCount);
+      waveformBars.forEach((bar, i) => bar.classList.toggle('wa-voice-played', i < filledCount));
+      const remaining = Math.max(0, (audio.duration || duration) - audio.currentTime);
+      durationLabel.textContent = formatDuration(remaining);
+    });
+
+    audio.addEventListener('ended', () => {
+      playBtn.textContent = '▶';
+      waveformBars.forEach((bar) => bar.classList.remove('wa-voice-played'));
+      durationLabel.textContent = formatDuration(duration);
+      delete audio.dataset.wlPlaying;
+    });
+
+    row.appendChild(bubble);
+    threadLog.appendChild(row);
+    threadLog.scrollTop = threadLog.scrollHeight;
+  }
+
+  function formatDuration(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, '0')}`;
   }
 
   function markThreadBubblesRead() {
@@ -658,6 +752,7 @@
   });
 
   threadBackBtn.addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording(false);
     currentThreadContactId = null;
     showScreen('inbox');
     sendWs('get_contacts');
@@ -678,6 +773,86 @@
     sendWs('send_inbox_message', { toDeviceId: currentThreadContactId, text });
     threadInput.value = '';
   });
+
+  // ---------- Voice note recording ----------
+  const MAX_RECORD_SECONDS = 90;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordStartTime = null;
+  let recordTimerInterval = null;
+  let recordStream = null;
+
+  function updateRecordTimeDisplay() {
+    const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+    recordTime.textContent = formatDuration(elapsed);
+    if (elapsed >= MAX_RECORD_SECONDS) stopRecording(true); // auto-send at cap
+  }
+
+  async function startRecording() {
+    if (!currentThreadContactId) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      addSystemBubble("Voice notes aren't supported in this browser.");
+      return;
+    }
+    try {
+      recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      addSystemBubble('Microphone permission is needed to record a voice note.');
+      return;
+    }
+
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(recordStream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.start();
+
+    recordStartTime = Date.now();
+    recordTime.textContent = '0:00';
+    micBtn.classList.add('wa-mic--recording');
+    threadForm.classList.add('hidden');
+    recordBar.classList.remove('hidden');
+    recordTimerInterval = setInterval(updateRecordTimeDisplay, 250);
+  }
+
+  function stopRecording(send) {
+    if (!mediaRecorder) return;
+    clearInterval(recordTimerInterval);
+    const durationSeconds = Math.max(1, Math.round((Date.now() - recordStartTime) / 1000));
+
+    mediaRecorder.addEventListener('stop', () => {
+      if (recordStream) recordStream.getTracks().forEach((t) => t.stop());
+      if (send && recordedChunks.length > 0 && currentThreadContactId) {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          sendWs('send_inbox_voice', {
+            toDeviceId: currentThreadContactId,
+            audioData: reader.result, // data: URL, works directly as an <audio> src
+            duration: durationSeconds,
+          });
+        };
+        reader.readAsDataURL(blob);
+      }
+      recordedChunks = [];
+      mediaRecorder = null;
+    }, { once: true });
+
+    mediaRecorder.stop();
+    micBtn.classList.remove('wa-mic--recording');
+    recordBar.classList.add('hidden');
+    threadForm.classList.remove('hidden');
+  }
+
+  micBtn.addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecording(true);
+    } else {
+      startRecording();
+    }
+  });
+
+  recordSendBtn.addEventListener('click', () => stopRecording(true));
+  recordCancelBtn.addEventListener('click', () => stopRecording(false));
 
   // ---------- Emoji picker ----------
   const EMOJIS = ['😀','😂','😅','😉','😊','😍','😘','😜','🤔','😎','😢','😭','😡','👍','👎','🙏','👋','🎉','❤️','🔥','✨','💀','🤝','😴'];
